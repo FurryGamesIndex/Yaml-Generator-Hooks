@@ -10,7 +10,7 @@ class OpenAI(BaseHook):
     CHANGED = None
 
     def setup(self, data: dict):
-        chat_dict = [{"role": "user", "content": data["description"] + f"visual-novel strategy real-time-strategy "
+        chat_dict = [{"role": "user", "content": data["description"] + f"\nvisual-novel strategy real-time-strategy "
                                                                        f"casual business-sim adventure board action "
                                                                        f"fantasy fighting music shooter puzzle "
                                                                        f"role-playing mmorpg dating-sim roguelike "
