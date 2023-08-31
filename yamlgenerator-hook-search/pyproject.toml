@@ -9,7 +9,7 @@ packages = [{include = "yamlgenerator_hook_search"}]
 
 [tool.poetry.dependencies]
 python = "^3.10"
-gameyamlspiderandgenerator = "^1.6.1"
+gameyamlspiderandgenerator = "1.6.16"
 epicstore-api = "^0.1.6"
 
 [tool.poetry.group.dev.dependencies]
