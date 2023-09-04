@@ -132,10 +132,10 @@ class Search(BaseHook):
         temp = data.copy()
         result = self.search_all('publish')
         publish = set([i for i,ii in result if i is not None]) | set(temp["tags"]['publish']) - {None}
-        link = set([i for i,ii in result if ii is not None]) | set(temp["links"])
+        link = [ii for i,ii in result if ii is not None]
         result = self.search_all('platform')
         platform = set([i for i,ii in result if i is not None]) | set(temp["tags"]["platform"]) - {None}
-        link = set([i for i,ii in result if ii is not None]) | link - {None}
+        link = link+[ii for i,ii in result if ii is not None]+temp["links"]
         temp["tags"]['publish'] = list(publish)
         temp["links"] = list(link)
         temp["tags"]["platform"] = list(platform)
