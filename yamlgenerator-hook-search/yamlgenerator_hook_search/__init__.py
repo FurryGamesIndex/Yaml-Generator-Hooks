@@ -1,15 +1,14 @@
 from re import sub
 from urllib.parse import quote_plus
-
-from loguru import logger
 from gameyamlspiderandgenerator.util.config import config
 from gameyamlspiderandgenerator.hook import BaseHook
 from gameyamlspiderandgenerator.util.spider import get_json, get_text
 from gameyamlspiderandgenerator.util.thread import ThreadWithReturnValue
 from bs4 import BeautifulSoup
 
-
 # print(config, type(config))
+Result = tuple[str | None, dict | None]
+
 
 class Search(BaseHook):
     CHANGED = ["tags", "links", "publish", "platform"]
@@ -32,7 +31,7 @@ class Search(BaseHook):
         """
         return sub(pattern, repl, string)
 
-    def search_play(self) -> tuple:
+    def search_play(self) -> Result:
         """
         publish
         """
@@ -42,13 +41,12 @@ class Search(BaseHook):
         )
         if "organic_results" in data and any(
                 [self.name_filter(i["title"]) == self.pure for i in data["organic_results"][0]["items"]]):
-            logger.info("FOUND: google_play")
             return "google-play", {'name': '.play-store',
                                    'uri':
                                        f'google-play-store:{data["organic_results"][0]["items"][0]["product_id"]}'}
         return None, None
 
-    def search_apple(self) -> tuple:
+    def search_apple(self) -> Result:
         """
         publish
         """
@@ -58,7 +56,6 @@ class Search(BaseHook):
         )
         if "organic_results" in data and any(
                 [self.name_filter(i["title"]) == self.pure for i in data["organic_results"]]):
-            logger.info("FOUND: apple_app_store")
             return "apple-appstore", {'name': '.apple-appstore', 'uri': data["organic_results"][0]["link"]}
         return None, None
 
@@ -83,7 +80,7 @@ class Search(BaseHook):
             i.start()
         return [ii.join() for ii in fn_list]
 
-    def search_epic(self):
+    def search_epic(self) -> Result:
         """
         publish
         """
@@ -93,13 +90,12 @@ class Search(BaseHook):
         reg = r"[^A-z\d]"
         if game_list and any(
                 [self.name_filter(i["title"]) == self.pure for i in game_list]):
-            logger.info("FOUND: epic")
             return "epic", {'name': '.epic',
                             'uri': f'https://store.epicgames.com/p/'
-                                   f'{self.name_filter(game_list[0]["title"], pattern=reg, repl="-")}'}
+                                   f'{self.name_filter(game_list[0]["title"], pattern=reg, repl="-").lower()}'}
         return None, None
 
-    def search_xbox(self):
+    def search_xbox(self) -> Result:
         """
         platform
         """
@@ -113,9 +109,56 @@ class Search(BaseHook):
             data = data.select('#nav-general > div > div:nth-child(2) > div > h3 > a')
             data1 = [(i.attrs['href'], i.text.strip()) for i in data]
             for _, i in data1:
-                if search_string.replace(" ","").lower() in i.replace(" ","").lower():
+                if self.name_filter(self.pure, " ").lower() in self.name_filter(i, " ").lower():
                     return "xbox-one", None
-            return None,None
+            return None, None
+
+    def search_gog(self) -> Result:
+        """
+        publish
+        """
+        search_string = self.encode
+        data = BeautifulSoup(get_text(f"https://www.gog.com/en/games?query={search_string}"
+                                      ), features="lxml")
+
+        if data.select_one('#Catalog > div.catalog__empty.ng-star-inserted > h2') is not None:
+            return None, None
+        else:
+            data1 = data.select('product-title > span')
+            data1 = [i.text for i in data1]
+            data2 = data.select('product-tile > a')
+            data2 = [i.attrs['href'] for i in data2]
+            data1 = list(zip(data2, data1))
+            for url, i in data1:
+                if self.name_filter(self.pure, " ").lower() in self.name_filter(i, " ").lower():
+                    return "gog", {'name': '.gog', 'uri': url}
+            return None, None
+
+    def search_microsoft_store(self) -> Result:
+        """
+        publish
+        """
+        # TODO
+        return None, None
+
+    def search_playstation_store(self) -> Result:
+        """
+        publish
+        """
+        search_string = self.encode
+        data = BeautifulSoup(get_text(f"https://store.playstation.com/en-us/search/{search_string}"
+                                      ), features="lxml")
+        title = data.select_one("#main > section > div > ul > li:nth-child(1) > div > a > div > section > span")
+        element = data.select_one("#main > section > div > ul > li:nth-child(1) > div > a")
+        if title is None or element is None:
+            return None, None
+        title = title.text
+        if self.name_filter(self.pure, " ").lower() in self.name_filter(title, " ").lower():
+            return "playstation-store", {'name': '.playstation-store',
+                                         'uri': 'https://store.playstation.com/'
+                                                + data.select_one(
+                                             "#main > section > div > ul > li:nth-child(1) > div > a").attrs['href']}
+        return None, None
 
     def setup(self, data: dict):
         """
@@ -131,13 +174,12 @@ class Search(BaseHook):
         self.encode = quote_plus(self.name_filter(data['name'], repl=" "))
         temp = data.copy()
         result = self.search_all('publish')
-        publish = set([i for i,ii in result if i is not None]) | set(temp["tags"]['publish']) - {None}
-        link = [ii for i,ii in result if ii is not None]
+        publish = set([i for i, ii in result if i is not None]) | set(temp["tags"]['publish']) - {None}
+        link = [ii for i, ii in result if ii is not None]
         result = self.search_all('platform')
-        platform = set([i for i,ii in result if i is not None]) | set(temp["tags"]["platform"]) - {None}
-        link = link+[ii for i,ii in result if ii is not None]+temp["links"]
+        platform = set([i for i, ii in result if i is not None]) | set(temp["tags"]["platform"]) - {None}
+        link = link + [ii for i, ii in result if ii is not None] + temp["links"]
         temp["tags"]['publish'] = list(publish)
         temp["links"] = list(link)
         temp["tags"]["platform"] = list(platform)
         return temp
-
