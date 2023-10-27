@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "yamlgenerator-hook-search"
-version = "0.3.0"
+version = "0.3.1"
 description = ""
 authors = ["kaixinol <keiplyer@gmail.com>"]
 license = "MIT"

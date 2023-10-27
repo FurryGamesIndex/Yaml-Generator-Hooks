@@ -10,3 +10,4 @@ class Test(TestCase):
         print(Search().setup({**template_dict, 'name': 'hollow knight', }))
         print(Search().setup({**template_dict, 'name': 'TUNIC', }))
         print(Search().setup({**template_dict, 'name': 'BLACKSAD : Under The Skin', }))
+        print(Search().setup({**template_dict, 'name': 'A Glimpse Of Memory', }))

@@ -1,9 +1,10 @@
 from re import sub
+import concurrent.futures
 from urllib.parse import quote_plus
+from concurrent.futures import Future
 from gameyamlspiderandgenerator.util.config import config
 from gameyamlspiderandgenerator.hook import BaseHook
 from gameyamlspiderandgenerator.util.spider import get_json, get_text
-from gameyamlspiderandgenerator.util.thread import ThreadWithReturnValue
 from bs4 import BeautifulSoup
 
 # print(config, type(config))
@@ -75,10 +76,10 @@ class Search(BaseHook):
                       and x.__doc__.strip() == type_tag,
             func_list,
         ))
-        fn_list = [ThreadWithReturnValue(target=i) for i in func_list]
-        for i in fn_list:
-            i.start()
-        return [ii.join() for ii in fn_list]
+
+        with concurrent.futures.ThreadPoolExecutor() as executor:
+            result: list[Future] = [executor.submit(i) for i in func_list]
+            return [i.result() for i in result]
 
     def search_epic(self) -> Result:
         """
