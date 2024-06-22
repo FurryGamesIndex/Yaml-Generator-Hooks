@@ -1,7 +1,6 @@
 from unittest import TestCase
 
 from gameyamlspiderandgenerator.util.fgi import template_dict
-from gameyamlspiderandgenerator.util.spider import get_text
 from yamlgenerator_hook_search import Search
 
 

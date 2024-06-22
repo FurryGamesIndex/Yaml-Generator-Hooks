@@ -1,3 +1,4 @@
+import functools
 from re import sub
 import concurrent.futures
 from urllib.parse import quote_plus
@@ -6,17 +7,33 @@ from gameyamlspiderandgenerator.util.config import config
 from gameyamlspiderandgenerator.hook import BaseHook
 from gameyamlspiderandgenerator.util.spider import get_json, get_text
 from bs4 import BeautifulSoup
+from loguru import logger
 
 # print(config, type(config))
 Result = tuple[str | None, dict | None]
 
 
+def error_handler(original_function):
+    @functools.wraps(original_function)
+    def wrapper_function(*args, **kwargs):
+        try:
+            result = original_function(*args, **kwargs)
+            return result
+        except Exception as e:
+            logger.warning(f"An error occurred in {original_function.__name__}: {str(e)}({type(e).__name__})")
+            return None, None
+
+    return wrapper_function
+
+
 class Search(BaseHook):
     CHANGED = ["tags", "links", "publish", "platform"]
+    REQUIRE_CONFIG = True
 
     def __init__(self):
         self.pure = None
         self.encode = None
+        self.root_config = config["hook_configs"]['search']
 
     @staticmethod
     def name_filter(string: str, pattern: str = r"[^A-z]", repl: str = ""):
@@ -32,13 +49,14 @@ class Search(BaseHook):
         """
         return sub(pattern, repl, string)
 
+    @error_handler
     def search_play(self) -> Result:
         """
         publish
         """
         data = get_json(
             "https://serpapi.com/search?engine=google_play&apikey="
-            f'{config["api"]["google-play"]}&store=apps&q={self.encode}'
+            f'{self.root_config["google-play"]}&store=apps&q={self.encode}'
         )
         if "organic_results" in data and any(
                 [self.name_filter(i["title"]) == self.pure for i in data["organic_results"][0]["items"]]):
@@ -47,13 +65,14 @@ class Search(BaseHook):
                                        f'google-play-store:{data["organic_results"][0]["items"][0]["product_id"]}'}
         return None, None
 
+    @error_handler
     def search_apple(self) -> Result:
         """
         publish
         """
         data = get_json(
             "https://serpapi.com/search.json?engine=apple_app_store&term="
-            f'{self.encode}&apikey={config["api"]["apple"]}'
+            f'{self.encode}&apikey={self.root_config["apple"]}'
         )
         if "organic_results" in data and any(
                 [self.name_filter(i["title"]) == self.pure for i in data["organic_results"]]):
@@ -65,15 +84,11 @@ class Search(BaseHook):
         publish
         """
         func_list = [
-            self.__getattribute__(i)
-            for i in (list(filter(lambda x: "__" not in x, self.__dir__())))
+            getattr(self, i)
+            for i in (list(filter(lambda x: "search_" in x and not x.endswith('_all'), self.__dir__())))
         ]
-
         func_list = list(filter(
-            lambda x: callable(x)
-                      and x.__name__.startswith("search")
-                      and x.__name__ != "search_all"
-                      and x.__doc__.strip() == type_tag,
+            lambda x: x.__doc__.strip() == type_tag,
             func_list,
         ))
 
@@ -81,6 +96,7 @@ class Search(BaseHook):
             result: list[Future] = [executor.submit(i) for i in func_list]
             return [i.result() for i in result]
 
+    @error_handler
     def search_epic(self) -> Result:
         """
         publish
@@ -96,6 +112,7 @@ class Search(BaseHook):
                                    f'{self.name_filter(game_list[0]["title"], pattern=reg, repl="-").lower()}'}
         return None, None
 
+    @error_handler
     def search_xbox(self) -> Result:
         """
         platform
@@ -114,6 +131,7 @@ class Search(BaseHook):
                     return "xbox-one", None
             return None, None
 
+    @error_handler
     def search_gog(self) -> Result:
         """
         publish
@@ -135,6 +153,7 @@ class Search(BaseHook):
                     return "gog", {'name': '.gog', 'uri': url}
             return None, None
 
+    @error_handler
     def search_microsoft_store(self) -> Result:
         """
         publish
@@ -142,6 +161,7 @@ class Search(BaseHook):
         # TODO
         return None, None
 
+    @error_handler
     def search_playstation_store(self) -> Result:
         """
         publish
