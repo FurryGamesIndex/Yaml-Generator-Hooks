@@ -34,7 +34,6 @@ class Search(BaseHook):
         self.pure = None
         self.encode = None
         self.root_config = config["hook_configs"]['search']
-
     @staticmethod
     def name_filter(string: str, pattern: str = r"[^A-z]", repl: str = ""):
         """
