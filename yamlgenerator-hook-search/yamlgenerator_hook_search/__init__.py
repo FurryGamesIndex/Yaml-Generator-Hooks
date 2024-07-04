@@ -3,14 +3,21 @@ from re import sub
 import concurrent.futures
 from urllib.parse import quote_plus
 from concurrent.futures import Future
+
+from gameyamlspiderandgenerator.exception import GenerateError
 from gameyamlspiderandgenerator.util.config import config
 from gameyamlspiderandgenerator.hook import BaseHook
 from gameyamlspiderandgenerator.util.spider import get_json, get_text
 from bs4 import BeautifulSoup
 from loguru import logger
+from serpapi import GoogleSearch
 
 # print(config, type(config))
 Result = tuple[str | None, dict | None]
+
+
+class APIRequestError(GenerateError):
+    pass
 
 
 def error_handler(original_function):
@@ -20,7 +27,7 @@ def error_handler(original_function):
             result = original_function(*args, **kwargs)
             return result
         except Exception as e:
-            logger.warning(f"An error occurred in {original_function.__name__}: {str(e)}({type(e).__name__})")
+            logger.warning(f"An {type(e).__name__} occurred in {original_function.__name__}: {str(e)}")
             return None, None
 
     return wrapper_function
@@ -34,6 +41,11 @@ class Search(BaseHook):
         self.pure = None
         self.encode = None
         self.root_config = config["hook_configs"]['search']
+        if self.root_config['apple'] is None or self.root_config['apple'] is None:
+            raise GenerateError('Starting from version 2.0.1, default configuration options are no longer provided. '
+                                'Please obtain an API token from https://serpapi.com/ and fill it in the YAML '
+                                'under the .hook_configs.search."google-play" and .hook_configs.search.apple sections.')
+
     @staticmethod
     def name_filter(string: str, pattern: str = r"[^A-z]", repl: str = ""):
         """
@@ -53,15 +65,24 @@ class Search(BaseHook):
         """
         publish
         """
-        data = get_json(
-            "https://serpapi.com/search?engine=google_play&apikey="
-            f'{self.root_config["google-play"]}&store=apps&q={self.encode}'
-        )
+        params = {
+            "engine": "google_play",
+            "q": self.encode,
+            "api_key": self.root_config["google-play"],
+            "store": "apps"
+        }
+
+        search = GoogleSearch(params)
+        data = search.get_dict()
+        if 'error' in data:
+            raise APIRequestError(data['error'])
         if "organic_results" in data and any(
-                [self.name_filter(i["title"]) == self.pure for i in data["organic_results"][0]["items"]]):
-            return "google-play", {'name': '.play-store',
-                                   'uri':
-                                       f'google-play-store:{data["organic_results"][0]["items"][0]["product_id"]}'}
+                self.name_filter(i["title"]) == self.pure for i in data["organic_results"][0]["items"]
+        ):
+            return "google-play", {
+                'name': '.play-store',
+                'uri': f'google-play-store:{data["organic_results"][0]["items"][0]["product_id"]}'
+            }
         return None, None
 
     @error_handler
@@ -69,13 +90,23 @@ class Search(BaseHook):
         """
         publish
         """
-        data = get_json(
-            "https://serpapi.com/search.json?engine=apple_app_store&term="
-            f'{self.encode}&apikey={self.root_config["apple"]}'
-        )
+        params = {
+            "engine": "apple_app_store",
+            "term": self.encode,
+            "api_key": self.root_config["apple"]
+        }
+
+        search = GoogleSearch(params)
+        data = search.get_dict()
+        if 'error' in data:
+            raise APIRequestError(data['error'])
         if "organic_results" in data and any(
-                [self.name_filter(i["title"]) == self.pure for i in data["organic_results"]]):
-            return "apple-appstore", {'name': '.apple-appstore', 'uri': data["organic_results"][0]["link"]}
+                self.name_filter(i["title"]) == self.pure for i in data["organic_results"]
+        ):
+            return "apple-appstore", {
+                'name': '.apple-appstore',
+                'uri': data["organic_results"][0]["link"]
+            }
         return None, None
 
     def search_all(self, type_tag: str) -> list:
